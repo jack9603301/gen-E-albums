@@ -43,7 +43,18 @@ func ImageToH265Mpeg(file string, output string, scale string) error {
 	WidthFromImage := b.Max.X
 	HeightFromImage := b.Max.Y
 	Direction := WidthFromImage >= HeightFromImage
+	scale_slice := strings.Split(scale, "x")
+	if len(scale_slice) < 2 {
+		scale_slice = strings.Split(scale, "X")
+	}
 	Direction = Direction
+	if Direction {
+		scale = scale_slice[0]
+	} else {
+		scale = scale_slice[1]
+	}
+	fmt.Println("======请注意：使用缩放比率弹性选择")
+	fmt.Println("选定线性缩放参数：", scale)
 	return nil
 }
 
@@ -85,6 +96,7 @@ func main() {
 	err := parser.Parse(nil)
 	if err != nil {
 		fmt.Println(err.Error())
+		return
 	}
 
 	if !*non_interactive {
