@@ -3,14 +3,15 @@ package main
 import (
 	"container/list"
 	"fmt"
-	"github.com/h2non/filetype"
-	"github.com/hellflame/argparse"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/h2non/filetype"
+	"github.com/hellflame/argparse"
 )
 
 var filelists = list.New()
@@ -61,12 +62,16 @@ func ImageToH265Mpeg(file string, output string, scale string) error {
 func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_interactive bool) {
 
 	if !non_interactive {
-		fmt.Println(">>>>>>>>>>>>>>>>请选择分辨率<<<<<<<<<<<<<<<<")
-		fmt.Println("1. 3840x2160")
-		fmt.Println("2. 1920x1080")
-		fmt.Println("3. 2160x3840(竖屏)")
-		fmt.Println("4. 31080x1920(竖屏)")
-		fmt.Println("5. 自定义分辨率")
+		width, height := getResolution()
+
+		if width == 0 {
+			// 输出一个空行
+			fmt.Println()
+			width, height = requestInputResolution()
+		}
+
+		scale = fmt.Sprintf("%dx%d", width, height)
+
 	}
 
 	fmt.Println(">>>执行图片预处理程序<<<")
