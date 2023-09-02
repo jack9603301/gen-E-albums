@@ -134,46 +134,38 @@ func ImageToScaleImage(file string, output string, scale string) error {
 
 	mw := imagick.NewMagickWand()
 	defer mw.Destroy()
-	err = mw.ReadImage(file)
-	if err != nil {
-		fmt.Println(err.Error())
-		return err
-	}
 
-	fmt.Printf("图片预处理原始大小为: %dx%d\n", mw.GetImageWidth(), mw.GetImageHeight())
-
-	err = mw.AdaptiveResizeImage(uint(WidthToImage), uint(HeightToImage))
-	if err != nil {
-		fmt.Println(err.Error())
-		return err
-	}
-
-	fmt.Printf("图片缩放处理后的大小为: %dx%d\n", mw.GetImageWidth(), mw.GetImageHeight())
-
-	fmt.Printf("设置图片背景颜色： 透明\n")
+	fmt.Println("创建背景调色板")
 	bg := imagick.NewPixelWand()
-	defer bg.Destroy()
-	bg.SetColor("transparent")
-	mw.SetBackgroundColor(bg)
+	bg.SetColor("none")
+	bg.SetAlpha(0)
 
-	fmt.Printf("扩展图片到分辨率： %dx%d\n", ParamWidth, ParamHeight)
-	offsetX := -int((uint(ParamWidth) - uint(mw.GetImageWidth())) / 2)
-	offsetY := -int((uint(ParamHeight) - uint(mw.GetImageHeight())) / 2)
-	mw.ExtentImage(uint(ParamWidth), uint(ParamHeight), offsetX, offsetY)
+	fmt.Println("创建背景图层")
+	mw.NewImage(uint(ParamWidth), uint(ParamHeight), bg)
+	mw.SetImageFormat("png")
 
-	fmt.Printf("扩展图片偏移量：OffsetX=%d,OffsetY=%d\n", offsetX, offsetY)
-	fmt.Printf("图片扩展处理后的实际大小为: %dx%d\n", mw.GetImageWidth(), mw.GetImageHeight())
+	fmt.Printf("读取 %s 图片文件\n", file)
+	source_mw := imagick.NewMagickWand()
+	defer source_mw.Destroy()
+	source_mw.ReadImage(file)
 
-	fmt.Println("设置居中")
-	mw.SetGravity(imagick.GRAVITY_CENTER)
+	fmt.Printf("图片预处理原始大小为: %dx%d\n", source_mw.GetImageWidth(), source_mw.GetImageHeight())
 
-	fmt.Println("输出文件为：", output)
-
-	err = mw.WriteImage(output)
+	err = source_mw.AdaptiveResizeImage(uint(WidthToImage), uint(HeightToImage))
 	if err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
+
+	fmt.Printf("图片缩放处理后的大小为: %dx%d\n", source_mw.GetImageWidth(), source_mw.GetImageHeight())
+
+	fmt.Println("将实际图片文件覆盖到背景图片中")
+	offsetX := int((uint(ParamWidth) - uint(source_mw.GetImageWidth())) / 2)
+	offsetY := int((uint(ParamHeight) - uint(source_mw.GetImageHeight())) / 2)
+	mw.CompositeImage(source_mw, imagick.COMPOSITE_OP_COPY, true, offsetX, offsetY)
+
+	fmt.Println("图片处理完毕，写入至:", output)
+	mw.WriteImage(output)
 
 	return nil
 }
@@ -206,10 +198,11 @@ func ImageScaleCtr(build_path string, filelists *list.List, non_interactive bool
 		file_full_without_ext := file_filename[:len(file_filename)-len(file_ext)]
 		build_file_full_without_ext := fmt.Sprintf("%s%s", build_path, file_base)
 		fmt.Printf("===>>> 正在处理：%s%s\n", file_full_without_ext, file_ext)
-		ImageToScaleImage(file_full_without_ext+file_ext, build_file_full_without_ext+file_ext, scale)
+		png_ext := ".png"
+		ImageToScaleImage(file_full_without_ext+file_ext, build_file_full_without_ext+png_ext, scale)
 		mpeg_file_ext := ".mp4"
 		build_tmpfile_full_without_ext := fmt.Sprintf("%s%s_img", build_path, file_base)
-		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+file_ext, build_tmpfile_full_without_ext+mpeg_file_ext, build_file_full_without_ext+mpeg_file_ext, args_param)
+		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+png_ext, build_tmpfile_full_without_ext+mpeg_file_ext, build_file_full_without_ext+mpeg_file_ext, args_param)
 		if err != nil {
 			fmt.Println(err)
 			return outputMpegImages, err
@@ -277,7 +270,7 @@ func main() {
 	pix_fmt := parser.String("pf", "pix_fmt", &argparse.Option{
 		Help:     "original image format",
 		Required: true,
-		Default:  "yuv420p"})
+		Default:  "yuv444p10le"})
 	vcodec_param := parser.String("vc", "vcodec", &argparse.Option{
 		Help:     "Video encoder settings",
 		Required: true,
