@@ -3,10 +3,10 @@ package main
 import (
 	"container/list"
 	"fmt"
-	"github.com/antonmedv/expr"
+	//"github.com/antonmedv/expr"
 	"github.com/h2non/filetype"
 	"github.com/hellflame/argparse"
-	_ "github.com/u2takey/ffmpeg-go"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/gographics/imagick.v3/imagick"
 	"image"
 	_ "image/gif"
@@ -18,6 +18,8 @@ import (
 )
 
 var filelists = list.New()
+var MpegHeight uint64
+var MpegWidth uint64
 
 func searchFile(path string, info os.FileInfo, err error) error {
 	kind, _ := filetype.MatchFile(path)
@@ -36,11 +38,42 @@ func checkexist_buildpath(build string) bool {
 	return false
 }
 
-func ImageToH265Mpeg(file string, output string, framerate float64) error {
+func ImageToH265Mpeg(file string, tmp_output string, output string, framerate string) (string, error) {
 	fmt.Println("转入图片压制视频处理程序，同时应用滤镜")
 	fmt.Println("输入图片的采样帧率是：", framerate)
-	//err := ffmpeg.Input(file, ffmpeg.KwArgs{"framerate": framerate})
-	return nil
+	fmt.Println("输入图片路径：", file)
+	fmt.Println("图片转视频的中间视频文件名是：", tmp_output)
+	err := ffmpeg.Input(file, ffmpeg.KwArgs{"framerate": framerate}).
+		Output(tmp_output, ffmpeg.KwArgs{
+			"r":       "25",
+			"c:v":     "libx265",
+			"tag:v":   "hvc1",
+			"pix_fmt": "yuv420p"}).
+		OverWriteOutput().
+		ErrorToStdOut().
+		Run()
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	err = ffmpeg.Input(tmp_output, ffmpeg.KwArgs{}).
+		Filter("fade", ffmpeg.Args{"t=in:st=0:d=0.5"}).
+		Filter("fade", ffmpeg.Args{"t=out:st=1.5:d=0.5"}).
+		Output(output, ffmpeg.KwArgs{
+			"r":       "25",
+			"c:v":     "libx265",
+			"tag:v":   "hvc1",
+			"pix_fmt": "yuv420p"}).
+		OverWriteOutput().
+		ErrorToStdOut().
+		Run()
+
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	fmt.Println("单图片视频临时文件输出至：", output)
+	return output, nil
 }
 
 func ImageToScaleImage(file string, output string, scale string) error {
@@ -51,38 +84,36 @@ func ImageToScaleImage(file string, output string, scale string) error {
 		return err
 	}
 	b := img.Bounds()
-	var WidthFromImage uint64 = uint64(b.Max.X)
-	var HeightFromImage uint64 = uint64(b.Max.Y)
-	Direction := WidthFromImage >= HeightFromImage
 	scale_slice := strings.Split(scale, "x")
 	if len(scale_slice) < 2 {
 		scale_slice = strings.Split(scale, "X")
 	}
-	Direction = Direction
+	var WidthFromImage uint64 = uint64(b.Max.X)
+	var HeightFromImage uint64 = uint64(b.Max.Y)
+	ParamWidth, _ := strconv.ParseUint(scale_slice[0], 10, 0)
+	ParamHeight, _ := strconv.ParseUint(scale_slice[1], 10, 0)
+	WidthFlag := WidthFromImage >= ParamWidth
+	HeightFlag := HeightFromImage >= ParamHeight
+	var Direction bool = false
+	switch {
+	case WidthFlag == true && HeightFlag == true:
+		Direction = WidthFromImage < HeightFromImage
+	case WidthFlag == true && HeightFlag == false:
+		Direction = true
+	case WidthFlag == true && HeightFlag == false:
+		Direction = false
+	}
 	var WidthToImage uint64 = 0
 	var HeightToImage uint64 = 0
-	var Scale uint64
 	if Direction {
-		WidthToImage, _ = strconv.ParseUint(scale_slice[0], 10, 0)
-		switch {
-		case WidthToImage > WidthFromImage:
-			Scale = WidthToImage / WidthFromImage
-		default:
-			Scale = WidthFromImage / WidthToImage
-		}
-		HeightToImage = HeightFromImage * Scale
+		WidthToImage = ParamWidth
+		HeightToImage = HeightFromImage * WidthToImage / WidthFromImage
 	} else {
-		HeightToImage, _ = strconv.ParseUint(scale_slice[1], 10, 0)
-		switch {
-		case HeightToImage > HeightFromImage:
-			Scale = HeightToImage / HeightFromImage
-		default:
-			Scale = HeightToImage / HeightFromImage
-		}
-		WidthToImage = WidthFromImage * Scale
+		HeightToImage = ParamHeight
+		WidthToImage = WidthFromImage * HeightToImage / HeightFromImage
 	}
 	fmt.Println("======请注意：使用缩放比率弹性选择")
-	fmt.Println("选定线性缩放参数：", scale)
+	fmt.Printf("选定线性缩放参数： %dx%d\n", WidthToImage, HeightToImage)
 
 	mw := imagick.NewMagickWand()
 	defer mw.Destroy()
@@ -100,7 +131,24 @@ func ImageToScaleImage(file string, output string, scale string) error {
 		return err
 	}
 
-	fmt.Printf("图片预处理后的实际大小为: %dx%d\n", mw.GetImageWidth(), mw.GetImageHeight())
+	fmt.Printf("图片缩放处理后的大小为: %dx%d\n", mw.GetImageWidth(), mw.GetImageHeight())
+
+	fmt.Printf("设置图片背景颜色： 透明\n")
+	bg := imagick.NewPixelWand()
+	defer bg.Destroy()
+	bg.SetColor("transparent")
+	mw.SetBackgroundColor(bg)
+
+	fmt.Printf("扩展图片到分辨率： %dx%d\n", ParamWidth, ParamHeight)
+	offsetX := -int((uint(ParamWidth) - uint(mw.GetImageWidth())) / 2)
+	offsetY := -int((uint(ParamHeight) - uint(mw.GetImageHeight())) / 2)
+	mw.ExtentImage(uint(ParamWidth), uint(ParamHeight), offsetX, offsetY)
+
+	fmt.Printf("扩展图片偏移量：OffsetX=%d,OffsetY=%d\n", offsetX, offsetY)
+	fmt.Printf("图片扩展处理后的实际大小为: %dx%d\n", mw.GetImageWidth(), mw.GetImageHeight())
+
+	fmt.Println("设置居中")
+	mw.SetGravity(imagick.GRAVITY_CENTER)
 
 	fmt.Println("输出文件为：", output)
 
@@ -113,7 +161,7 @@ func ImageToScaleImage(file string, output string, scale string) error {
 	return nil
 }
 
-func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_interactive bool, framerate float64) {
+func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_interactive bool, framerate string) (*list.List, error) {
 
 	if !non_interactive {
 		width, height := getResolution()
@@ -129,6 +177,7 @@ func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_in
 	}
 
 	fmt.Println(">>>执行图片预处理程序<<<")
+	outputMpegImages := list.New()
 	for file := filelists.Front(); file != nil; file = file.Next() {
 		file_filename := file.Value.(string)
 		file_ext := filepath.Ext(file_filename)
@@ -138,8 +187,37 @@ func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_in
 		fmt.Printf("===>>> 正在处理：%s%s\n", file_full_without_ext, file_ext)
 		ImageToScaleImage(file_full_without_ext+file_ext, build_file_full_without_ext+file_ext, scale)
 		mpeg_file_ext := ".mp4"
-		ImageToH265Mpeg(build_file_full_without_ext+file_ext, build_file_full_without_ext+mpeg_file_ext, framerate)
+		build_tmpfile_full_without_ext := fmt.Sprintf("%s%s_img", build_path, file_base)
+		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+file_ext, build_tmpfile_full_without_ext+mpeg_file_ext, build_file_full_without_ext+mpeg_file_ext, framerate)
+		if err != nil {
+			fmt.Println(err)
+			return outputMpegImages, err
+		}
+		outputMpegImages.PushBack(output_filename)
 	}
+	return outputMpegImages, nil
+}
+
+func VideoConcat(ImagesMpeg *list.List, output string) error {
+	var ImageObjs []*ffmpeg.Stream
+	for file := ImagesMpeg.Front(); file != nil; file = file.Next() {
+		ImageObj := ffmpeg.Input(file.Value.(string))
+		ImageObjs = append(ImageObjs, ImageObj)
+	}
+
+	err := ffmpeg.Concat(ImageObjs, ffmpeg.KwArgs{}).
+		Output(output, ffmpeg.KwArgs{
+			"r":     "25",
+			"c:v":   "libx265",
+			"tag:v": "hvc1"}).
+		OverWriteOutput().
+		ErrorToStdOut().
+		Run()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
 }
 
 func main() {
@@ -154,17 +232,21 @@ func main() {
 	non_interactive := parser.Flag("ni", "non-interactive", &argparse.Option{
 		Help:     "Enable non-interactive mode",
 		Required: false})
-	framerate_str := parser.String("fr", "framerate", &argparse.Option{
-		Help:     "Input picture sampling frame rate",
+	/*framerate_str := parser.String("fr", "framerate", &argparse.Option{
+	Help:     "Input picture sampling frame rate",
+	Required: false,
+	Default:  "1/2"})*/
+	duration := parser.Int("d", "duration", &argparse.Option{
+		Help:     "The picture shows the duration",
 		Required: false,
-		Default:  "1/2"})
+		Default:  "2"})
 	err := parser.Parse(nil)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	framerate_pragam, err := expr.Compile(*framerate_str, expr.Env(nil))
+	/*framerate_pragam, err := expr.Compile(*framerate_str, expr.Env(nil))
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -174,7 +256,10 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 		return
-	}
+	}*/
+
+	var framerate float64 = 1.0 / float64(*duration)
+	framerate_str := fmt.Sprintf("%f", framerate)
 
 	if !*non_interactive {
 		fmt.Println(">>>请注意：进入交互式模式!<<<")
@@ -204,6 +289,12 @@ func main() {
 		fmt.Printf("%s%s\n", file_base, file_ext)
 	}
 
-	ImageScaleCtr(build_path, filelists, *scale, *non_interactive, framerate.(float64))
+	outputMpegImages, _ := ImageScaleCtr(build_path, filelists, *scale, *non_interactive, framerate_str)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	VideoConcat(outputMpegImages, "/home/jack/下载/images/output.mp4")
 
 }
