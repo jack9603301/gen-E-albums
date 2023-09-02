@@ -39,6 +39,10 @@ func checkexist_buildpath(build string) bool {
 	return false
 }
 
+func AddingOutputMpegMetaData(ffmpeg *ffmpeg.KwArgs) {
+	(*ffmpeg)["metadata"] = "description=\"此视频由gen-E-albums电子相册编译程序压制而成，它是出于兴趣和需求而编写，源代码从github的jack9603301/gen-E-albums获取\""
+}
+
 func ImageToH265Mpeg(file string, tmp_output string, output string, args_param ArgParam) (string, error) {
 	fmt.Println(args_param.framerate)
 	fmt.Println("转入图片压制视频处理程序，同时应用滤镜")
@@ -60,6 +64,7 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 	rate := fmt.Sprintf("%d", args_param.rate)
 	ffmpeg_output_KwArg["r"] = rate
 	ffmpeg_output_KwArg["pix_fmt"] = args_param.pix_fmt
+	AddingOutputMpegMetaData(&ffmpeg_output_KwArg)
 	err := ffmpeg.Input(file, ffmpeg.KwArgs{"framerate": args_param.framerate}).
 		Output(tmp_output, ffmpeg_output_KwArg).
 		OverWriteOutput().
