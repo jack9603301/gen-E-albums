@@ -259,19 +259,19 @@ func main() {
 		Required: false})
 	duration := parser.Int("d", "duration", &argparse.Option{
 		Help:     "The picture shows the duration",
-		Required: false,
+		Required: true,
 		Default:  "2"})
 	rate := parser.Int("r", "rate", &argparse.Option{
 		Help:     "Output video frame rate",
-		Required: false,
+		Required: true,
 		Default:  "25"})
 	pix_fmt := parser.String("pf", "pix_fmt", &argparse.Option{
 		Help:     "original image format",
-		Required: false,
+		Required: true,
 		Default:  "yuv420p"})
 	vcodec_param := parser.String("vc", "vcodec", &argparse.Option{
 		Help:     "Video encoder settings",
-		Required: false,
+		Required: true,
 		Default:  "libx265"})
 	tag_param := parser.String("t", "tag", &argparse.Option{
 		Help:     "Video encoder tag (Only for H265)",
@@ -280,6 +280,21 @@ func main() {
 	err := parser.Parse(nil)
 	if err != nil {
 		fmt.Println(err.Error())
+		return
+	}
+
+	switch {
+	case len(*root) == 0:
+		fmt.Println("错误，参数错误，ROOT不能传入空参数")
+		return
+	case len(*scale) == 0:
+		fmt.Println("错误，参数错误，SCALE不能传入空参数")
+		return
+	case len(*pix_fmt) == 0:
+		fmt.Println("错误，参数错误，PIX_FMT不能传入空参数")
+		return
+	case len(*vcodec_param) == 0:
+		fmt.Println("错误，参数错误，VCODEC_PARAM不能传入空参数")
 		return
 	}
 
