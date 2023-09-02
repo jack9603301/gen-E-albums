@@ -16,6 +16,8 @@ import (
 	"github.com/hellflame/argparse"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/gographics/imagick.v3/imagick"
+
+	"gen-E-albums/assert"
 )
 
 var filelists = list.New()
@@ -40,7 +42,7 @@ func checkexist_buildpath(build string) bool {
 }
 
 func AddingOutputMpegMetaData(ffmpeg *ffmpeg.KwArgs) {
-	(*ffmpeg)["metadata"] = "description=\"此视频由gen-E-albums电子相册编译程序压制而成，它是出于兴趣和需求而编写，源代码从github的jack9603301/gen-E-albums获取\""
+	(*ffmpeg)["metadata"] = "description=\"此视频相册由gen-E-albums电子相册编译程序压制而成，它是出于兴趣和需求而编写，源代码从github的jack9603301/gen-E-albums获取\""
 }
 
 func ImageToH265Mpeg(file string, tmp_output string, output string, args_param ArgParam) (string, error) {
@@ -51,6 +53,7 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 	fmt.Println("图片转视频的中间视频文件名是：", tmp_output)
 	codec := args_param.codec
 	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
+	assert.Assert(codec.video != nil, "参数错误，没有编码器信息！")
 	if codec.video == nil {
 		panic("参数错误，没有编码器信息！")
 	}
@@ -225,6 +228,7 @@ func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) erro
 
 	codec := args_param.codec
 	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
+	assert.Assert(codec.video != nil, "参数错误，没有编码器信息！")
 	if codec.video == nil {
 		panic("参数错误，没有编码器信息！")
 	}
