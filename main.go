@@ -48,11 +48,10 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 	codec := args_param.codec
 	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
 	if codec.video == nil {
-		fmt.Println("参数错误，没有编码器信息！")
-		return "", fmt.Errorf("参数错误，没有编码器信息！")
+		panic("参数错误，没有编码器信息！")
 	}
+	ffmpeg_output_KwArg["c:v"] = *codec.video
 	if *codec.video == string("libx265") {
-		ffmpeg_output_KwArg["c:v"] = "libx265"
 		tag := codec.tag
 		if tag != nil {
 			ffmpeg_output_KwArg["tag:v"] = *tag
@@ -222,11 +221,10 @@ func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) erro
 	codec := args_param.codec
 	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
 	if codec.video == nil {
-		fmt.Println("参数错误，没有编码器信息！")
-		return fmt.Errorf("参数错误，没有编码器信息！")
+		panic("参数错误，没有编码器信息！")
 	}
+	ffmpeg_output_KwArg["c:v"] = *codec.video
 	if *codec.video == string("libx265") {
-		ffmpeg_output_KwArg["c:v"] = "libx265"
 		tag := codec.tag
 		if tag != nil {
 			ffmpeg_output_KwArg["tag:v"] = *tag
