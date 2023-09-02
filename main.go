@@ -3,11 +3,7 @@ package main
 import (
 	"container/list"
 	"fmt"
-	//"github.com/antonmedv/expr"
-	"github.com/h2non/filetype"
-	"github.com/hellflame/argparse"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
-	"gopkg.in/gographics/imagick.v3/imagick"
+
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -15,6 +11,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/h2non/filetype"
+	"github.com/hellflame/argparse"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"gopkg.in/gographics/imagick.v3/imagick"
 )
 
 var filelists = list.New()
@@ -38,17 +39,30 @@ func checkexist_buildpath(build string) bool {
 	return false
 }
 
-func ImageToH265Mpeg(file string, tmp_output string, output string, framerate string) (string, error) {
+func ImageToH265Mpeg(file string, tmp_output string, output string, args_param ArgParam) (string, error) {
+	fmt.Println(args_param.framerate)
 	fmt.Println("转入图片压制视频处理程序，同时应用滤镜")
-	fmt.Println("输入图片的采样帧率是：", framerate)
+	fmt.Println("输入图片的采样帧率是：", args_param.framerate)
 	fmt.Println("输入图片路径：", file)
 	fmt.Println("图片转视频的中间视频文件名是：", tmp_output)
-	err := ffmpeg.Input(file, ffmpeg.KwArgs{"framerate": framerate}).
-		Output(tmp_output, ffmpeg.KwArgs{
-			"r":       "25",
-			"c:v":     "libx265",
-			"tag:v":   "hvc1",
-			"pix_fmt": "yuv420p"}).
+	codec := args_param.codec
+	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
+	if codec.video == nil {
+		fmt.Println("参数错误，没有编码器信息！")
+		return "", fmt.Errorf("参数错误，没有编码器信息！")
+	}
+	if *codec.video == string("libx265") {
+		ffmpeg_output_KwArg["c:v"] = "libx265"
+		tag := codec.tag
+		if tag != nil {
+			ffmpeg_output_KwArg["tag:v"] = *tag
+		}
+	}
+	rate := fmt.Sprintf("%d", args_param.rate)
+	ffmpeg_output_KwArg["r"] = rate
+	ffmpeg_output_KwArg["pix_fmt"] = args_param.pix_fmt
+	err := ffmpeg.Input(file, ffmpeg.KwArgs{"framerate": args_param.framerate}).
+		Output(tmp_output, ffmpeg_output_KwArg).
 		OverWriteOutput().
 		ErrorToStdOut().
 		Run()
@@ -59,11 +73,7 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, framerate st
 	err = ffmpeg.Input(tmp_output, ffmpeg.KwArgs{}).
 		Filter("fade", ffmpeg.Args{"t=in:st=0:d=0.5"}).
 		Filter("fade", ffmpeg.Args{"t=out:st=1.5:d=0.5"}).
-		Output(output, ffmpeg.KwArgs{
-			"r":       "25",
-			"c:v":     "libx265",
-			"tag:v":   "hvc1",
-			"pix_fmt": "yuv420p"}).
+		Output(output, ffmpeg_output_KwArg).
 		OverWriteOutput().
 		ErrorToStdOut().
 		Run()
@@ -161,7 +171,9 @@ func ImageToScaleImage(file string, output string, scale string) error {
 	return nil
 }
 
-func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_interactive bool, framerate string) (*list.List, error) {
+func ImageScaleCtr(build_path string, filelists *list.List, non_interactive bool, args_param ArgParam) (*list.List, error) {
+
+	var scale string
 
 	if !non_interactive {
 		width, height := getResolution()
@@ -174,6 +186,8 @@ func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_in
 
 		scale = fmt.Sprintf("%dx%d", width, height)
 
+	} else {
+		scale = args_param.scale
 	}
 
 	fmt.Println(">>>执行图片预处理程序<<<")
@@ -188,7 +202,7 @@ func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_in
 		ImageToScaleImage(file_full_without_ext+file_ext, build_file_full_without_ext+file_ext, scale)
 		mpeg_file_ext := ".mp4"
 		build_tmpfile_full_without_ext := fmt.Sprintf("%s%s_img", build_path, file_base)
-		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+file_ext, build_tmpfile_full_without_ext+mpeg_file_ext, build_file_full_without_ext+mpeg_file_ext, framerate)
+		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+file_ext, build_tmpfile_full_without_ext+mpeg_file_ext, build_file_full_without_ext+mpeg_file_ext, args_param)
 		if err != nil {
 			fmt.Println(err)
 			return outputMpegImages, err
@@ -198,18 +212,31 @@ func ImageScaleCtr(build_path string, filelists *list.List, scale string, non_in
 	return outputMpegImages, nil
 }
 
-func VideoConcat(ImagesMpeg *list.List, output string) error {
+func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) error {
 	var ImageObjs []*ffmpeg.Stream
 	for file := ImagesMpeg.Front(); file != nil; file = file.Next() {
 		ImageObj := ffmpeg.Input(file.Value.(string))
 		ImageObjs = append(ImageObjs, ImageObj)
 	}
 
+	codec := args_param.codec
+	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
+	if codec.video == nil {
+		fmt.Println("参数错误，没有编码器信息！")
+		return fmt.Errorf("参数错误，没有编码器信息！")
+	}
+	if *codec.video == string("libx265") {
+		ffmpeg_output_KwArg["c:v"] = "libx265"
+		tag := codec.tag
+		if tag != nil {
+			ffmpeg_output_KwArg["tag:v"] = *tag
+		}
+	}
+	rate := fmt.Sprintf("%d", args_param.rate)
+	ffmpeg_output_KwArg["r"] = rate
+
 	err := ffmpeg.Concat(ImageObjs, ffmpeg.KwArgs{}).
-		Output(output, ffmpeg.KwArgs{
-			"r":     "25",
-			"c:v":   "libx265",
-			"tag:v": "hvc1"}).
+		Output(output, ffmpeg_output_KwArg).
 		OverWriteOutput().
 		ErrorToStdOut().
 		Run()
@@ -232,34 +259,54 @@ func main() {
 	non_interactive := parser.Flag("ni", "non-interactive", &argparse.Option{
 		Help:     "Enable non-interactive mode",
 		Required: false})
-	/*framerate_str := parser.String("fr", "framerate", &argparse.Option{
-	Help:     "Input picture sampling frame rate",
-	Required: false,
-	Default:  "1/2"})*/
 	duration := parser.Int("d", "duration", &argparse.Option{
 		Help:     "The picture shows the duration",
 		Required: false,
 		Default:  "2"})
+	rate := parser.Int("r", "rate", &argparse.Option{
+		Help:     "Output video frame rate",
+		Required: false,
+		Default:  "25"})
+	pix_fmt := parser.String("pf", "pix_fmt", &argparse.Option{
+		Help:     "original image format",
+		Required: false,
+		Default:  "yuv420p"})
+	vcodec_param := parser.String("vc", "vcodec", &argparse.Option{
+		Help:     "Video encoder settings",
+		Required: false,
+		Default:  "libx265"})
+	tag_param := parser.String("t", "tag", &argparse.Option{
+		Help:     "Video encoder tag (Only for H265)",
+		Required: false,
+		Default:  "hvc1"})
 	err := parser.Parse(nil)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
 	}
 
-	/*framerate_pragam, err := expr.Compile(*framerate_str, expr.Env(nil))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	framerate, err := expr.Run(framerate_pragam, expr.Env(nil))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}*/
-
 	var framerate float64 = 1.0 / float64(*duration)
 	framerate_str := fmt.Sprintf("%f", framerate)
+
+	vcodec := *vcodec_param
+	tag := *tag_param
+
+	codec := CodecParam{
+		video: &vcodec,
+		tag:   &tag,
+	}
+
+	if len(tag) == 0 || *vcodec_param != "libx265" {
+		codec.tag = nil
+	}
+
+	args_param := ArgParam{
+		rate:      *rate,
+		framerate: framerate_str,
+		codec:     codec,
+		scale:     *scale,
+		pix_fmt:   *pix_fmt,
+	}
 
 	if !*non_interactive {
 		fmt.Println(">>>请注意：进入交互式模式!<<<")
@@ -289,12 +336,14 @@ func main() {
 		fmt.Printf("%s%s\n", file_base, file_ext)
 	}
 
-	outputMpegImages, _ := ImageScaleCtr(build_path, filelists, *scale, *non_interactive, framerate_str)
+	outputMpegImages, _ := ImageScaleCtr(build_path, filelists, *non_interactive, args_param)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	VideoConcat(outputMpegImages, "/home/jack/下载/images/output.mp4")
+	output_mp4 := fmt.Sprintf("%s%s", build_path, "/./output.mp4")
+
+	VideoConcat(outputMpegImages, output_mp4, args_param)
 
 }
