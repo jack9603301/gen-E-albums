@@ -8,16 +8,14 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"gen-E-albums/ffmpeg"
 	"github.com/h2non/filetype"
 	"github.com/hellflame/argparse"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/gographics/imagick.v3/imagick"
-	"regexp"
 
 	"gen-E-albums/assert"
 )
@@ -25,6 +23,8 @@ import (
 var filelists = list.New()
 var MpegHeight uint64
 var MpegWidth uint64
+
+const DESCMeta string = "description=\"此视频相册由gen-E-albums电子相册编译程序压制而成，它是出于兴趣和需求而编写，源代码从github的jack9603301/gen-E-albums获取\""
 
 func searchFile(path string, info os.FileInfo, err error) error {
 	kind, _ := filetype.MatchFile(path)
@@ -43,22 +43,12 @@ func checkexist_buildpath(build string) bool {
 	return false
 }
 
-func AddingOutputMpegMetaData(ffmpeg *ffmpeg.KwArgs) {
-	(*ffmpeg)["metadata"] = "description=\"此视频相册由gen-E-albums电子相册编译程序压制而成，它是出于兴趣和需求而编写，源代码从github的jack9603301/gen-E-albums获取\""
-}
-
-func AddingFFMpegCliVerbose(ffmpeg *ffmpeg.Stream) *ffmpeg.Stream {
-	stream := ffmpeg.ErrorToStdOut()
-	return stream
-}
-
-func ImageToH265Mpeg(file string, tmp_output string, output string, args_param ArgParam) (string, error) {
+func ImageToH265Mpeg(file string, output string, args_param ArgParam) (string, error) {
 	fmt.Println("转入图片压制视频处理程序，同时应用滤镜")
 	fmt.Println("输入图片的保留时间是：", args_param.duration)
 	fmt.Println("输入图片路径：", file)
-	fmt.Println("图片转视频的中间视频文件名是：", tmp_output)
 	codec := args_param.codec
-	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
+	ffmpeg_output_KwArg := ffmpeg.FFmpeg_Args{}
 	assert.Assert(codec.video != nil, "参数错误，没有编码器信息！")
 	if codec.video == nil {
 		panic("参数错误，没有编码器信息！")
@@ -70,22 +60,19 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 			ffmpeg_output_KwArg["tag:v"] = *tag
 		}
 	}
-	rate := fmt.Sprintf("%d", args_param.rate)
-	time := fmt.Sprintf("%d", args_param.duration)
-	ffmpeg_output_KwArg["r"] = rate
+	ffmpeg_output_KwArg["r"] = args_param.rate
 	ffmpeg_output_KwArg["pix_fmt"] = args_param.pix_fmt
-	ffmpeg_output_KwArg["t"] = time
-	AddingOutputMpegMetaData(&ffmpeg_output_KwArg)
-	ffmpeg_input_KwArg := ffmpeg.KwArgs{}
+	ffmpeg_output_KwArg["t"] = args_param.duration
+	ffmpeg_output_KwArg.AddingOutputMpegMetaData("metadata", DESCMeta)
+	ffmpeg_input_KwArg := ffmpeg.FFmpeg_Args{}
 	ffmpeg_input_KwArg["loop"] = 1
 
 	stream := ffmpeg.Input(file, ffmpeg_input_KwArg).
-		Filter("fade", ffmpeg.Args{"t=in:st=0:d=0.5"}).
-		Filter("fade", ffmpeg.Args{"t=out:st=1.5:d=0.5"}).
-		Output(output, ffmpeg_output_KwArg).
-		OverWriteOutput()
+		Filter("fade", "t=in", "st=0", "d=0.5").
+		Filter("fade", "t=out", "st=1.5", "d=0.5").
+		Output(output, ffmpeg_output_KwArg)
 
-	err := AddingFFMpegCliVerbose(stream).Run()
+	err := stream.Run(true, true)
 	if err != nil {
 		fmt.Println(err)
 		return "", err
@@ -202,8 +189,7 @@ func ImageScaleCtr(build_path string, filelists *list.List, non_interactive bool
 		png_ext := ".png"
 		ImageToScaleImage(file_full_without_ext+file_ext, build_file_full_without_ext+png_ext, scale)
 		mpeg_file_ext := ".mp4"
-		build_tmpfile_full_without_ext := fmt.Sprintf("%s%s_img", build_path, file_base)
-		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+png_ext, build_tmpfile_full_without_ext+mpeg_file_ext, build_file_full_without_ext+mpeg_file_ext, args_param)
+		output_filename, err := ImageToH265Mpeg(build_file_full_without_ext+png_ext, build_file_full_without_ext+mpeg_file_ext, args_param)
 		if err != nil {
 			fmt.Println(err)
 			return outputMpegImages, err
@@ -214,14 +200,14 @@ func ImageScaleCtr(build_path string, filelists *list.List, non_interactive bool
 }
 
 func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) error {
-	var ImageObjs []*ffmpeg.Stream
+	var ImageObjs []*ffmpeg.FFmpeg_Stream
 	for file := ImagesMpeg.Front(); file != nil; file = file.Next() {
 		ImageObj := ffmpeg.Input(file.Value.(string))
 		ImageObjs = append(ImageObjs, ImageObj)
 	}
 
 	codec := args_param.codec
-	ffmpeg_output_KwArg := ffmpeg.KwArgs{}
+	ffmpeg_output_KwArg := ffmpeg.FFmpeg_Args{}
 	assert.Assert(codec.video != nil, "参数错误，没有编码器信息！")
 	if codec.video == nil {
 		panic("参数错误，没有编码器信息！")
@@ -233,14 +219,12 @@ func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) erro
 			ffmpeg_output_KwArg["tag:v"] = *tag
 		}
 	}
-	rate := fmt.Sprintf("%d", args_param.rate)
-	ffmpeg_output_KwArg["r"] = rate
+	ffmpeg_output_KwArg["r"] = args_param.rate
 
-	stream := ffmpeg.Concat(ImageObjs, ffmpeg.KwArgs{}).
-		Output(output, ffmpeg_output_KwArg).
-		OverWriteOutput()
+	stream := ffmpeg.Concat(ImageObjs, ffmpeg.FFmpeg_Args{}).
+		Output(output, ffmpeg_output_KwArg)
 
-	err := AddingFFMpegCliVerbose(stream).Run()
+	err := stream.Run(true, true)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -280,6 +264,10 @@ func main() {
 		Help:     "Video encoder tag (Only for H265)",
 		Required: false,
 		Default:  "hvc1"})
+	log_level := parser.String("ll", "log_level", &argparse.Option{
+		Help:     "Set Log level",
+		Required: false,
+		Default:  "INFO"})
 	err := parser.Parse(nil)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -299,26 +287,51 @@ func main() {
 	case len(*vcodec_param) == 0:
 		fmt.Println("错误，参数错误，VCODEC_PARAM不能传入空参数")
 		return
+	case len(*log_level) == 0:
+		fmt.Println("错误，参数错误，LOG_LEVEL不能传入空参数")
+		return
 	}
 
-	cmd := exec.Command("ffmpeg", "-version")
+	log_level_Upper := strings.ToUpper(*log_level)
+	log_level_parse := ffmpeg.LOGLEVEL_INFO
 
-	output, err := cmd.Output()
-	if err != nil {
+	switch log_level_Upper {
+	case "QUIET":
+		log_level_parse = ffmpeg.LOGLEVEL_QUIET
+	case "PANIC":
+		log_level_parse = ffmpeg.LOGLEVEL_PANIC
+	case "FATAL":
+		log_level_parse = ffmpeg.LOGLEVEL_FATAL
+	case "ERROR":
+		log_level_parse = ffmpeg.LOGLEVEL_ERROR
+	case "WARNING":
+		log_level_parse = ffmpeg.LOGLEVEL_WARNING
+	case "INFO":
+		log_level_parse = ffmpeg.LOGLEVEL_INFO
+	case "VERBOSE":
+		log_level_parse = ffmpeg.LOGLEVEL_VERBOSE
+	case "DEBUG":
+		log_level_parse = ffmpeg.LOGLEVEL_DEBUG
+	case "TRACE":
+		log_level_parse = ffmpeg.LOGLEVEL_TRACE
+	default:
+		fmt.Println(">>> 请注意，日志类型", log_level_Upper, "无效！自动选择INFO级别！")
+		log_level_parse = ffmpeg.LOGLEVEL_INFO
+	}
+
+	version, installed := ffmpeg.CheckFFmpegInstalled()
+
+	if !installed {
 		fmt.Println(">>>无法检测到ffmpeg工具，请安装ffmpeg并加入环境变量！")
 		return
 	} else {
-		outputline := strings.Split(string(output), "\n")
-		version_info := outputline[0]
-		re := regexp.MustCompile(`^ffmpeg version (\d.\d).*$`)
-		group := re.FindStringSubmatch(version_info)
-		if len(group) == 0 {
-			fmt.Println(">>>错误：ffmpeg不是有效的ffmpeg官方工具，请重新安装！")
-			return
-		} else {
-			fmt.Println(">>> 检测到ffmpeg版本：", group[1])
-		}
+		fmt.Println(">>> 检测到ffmpeg版本：", version)
 	}
+	ffmpeg.SetFFmpegLogLevel(log_level_parse)
+	ffmpeg.SetFFmpegHideBanner(true)
+
+	fmt.Println(">>>初始化FFmpeg资源！")
+	ffmpeg.InitHookResource()
 
 	vcodec := *vcodec_param
 	tag := *tag_param
@@ -347,7 +360,9 @@ func main() {
 	imagick.Initialize()
 	defer imagick.Terminate()
 
-	build_path := fmt.Sprintf("%s%s", *root, "/./build/")
+	root_dir := strings.TrimSuffix(*root, "/")
+
+	build_path := fmt.Sprintf("%s%s", root_dir, "/build/")
 
 	if !checkexist_buildpath(build_path) {
 		os.Mkdir(build_path, os.ModePerm)
@@ -374,7 +389,7 @@ func main() {
 		return
 	}
 
-	output_mp4 := fmt.Sprintf("%s%s", build_path, "/./output.mp4")
+	output_mp4 := fmt.Sprintf("%s%s", build_path, "output.mp4")
 
 	VideoConcat(outputMpegImages, output_mp4, args_param)
 
