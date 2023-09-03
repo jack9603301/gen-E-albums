@@ -6,9 +6,9 @@ type CodecParam struct {
 }
 
 type ArgParam struct {
-	rate      int
-	codec     CodecParam
-	framerate string
-	scale     string
-	pix_fmt   string
+	rate     int
+	codec    CodecParam
+	duration int
+	scale    string
+	pix_fmt  string
 }

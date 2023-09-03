@@ -46,9 +46,8 @@ func AddingOutputMpegMetaData(ffmpeg *ffmpeg.KwArgs) {
 }
 
 func ImageToH265Mpeg(file string, tmp_output string, output string, args_param ArgParam) (string, error) {
-	fmt.Println(args_param.framerate)
 	fmt.Println("转入图片压制视频处理程序，同时应用滤镜")
-	fmt.Println("输入图片的采样帧率是：", args_param.framerate)
+	fmt.Println("输入图片的保留时间是：", args_param.duration)
 	fmt.Println("输入图片路径：", file)
 	fmt.Println("图片转视频的中间视频文件名是：", tmp_output)
 	codec := args_param.codec
@@ -65,26 +64,21 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 		}
 	}
 	rate := fmt.Sprintf("%d", args_param.rate)
+	time := fmt.Sprintf("%d", args_param.duration)
 	ffmpeg_output_KwArg["r"] = rate
 	ffmpeg_output_KwArg["pix_fmt"] = args_param.pix_fmt
+	ffmpeg_output_KwArg["t"] = time
 	AddingOutputMpegMetaData(&ffmpeg_output_KwArg)
-	err := ffmpeg.Input(file, ffmpeg.KwArgs{"framerate": args_param.framerate}).
-		Output(tmp_output, ffmpeg_output_KwArg).
-		OverWriteOutput().
-		ErrorToStdOut().
-		Run()
-	if err != nil {
-		fmt.Println(err)
-		return "", err
-	}
-	err = ffmpeg.Input(tmp_output, ffmpeg.KwArgs{}).
+	ffmpeg_input_KwArg := ffmpeg.KwArgs{}
+	ffmpeg_input_KwArg["loop"] = 1
+
+	err := ffmpeg.Input(file, ffmpeg_input_KwArg).
 		Filter("fade", ffmpeg.Args{"t=in:st=0:d=0.5"}).
 		Filter("fade", ffmpeg.Args{"t=out:st=1.5:d=0.5"}).
 		Output(output, ffmpeg_output_KwArg).
 		OverWriteOutput().
 		ErrorToStdOut().
 		Run()
-
 	if err != nil {
 		fmt.Println(err)
 		return "", err
@@ -300,9 +294,6 @@ func main() {
 		return
 	}
 
-	var framerate float64 = 1.0 / float64(*duration)
-	framerate_str := fmt.Sprintf("%f", framerate)
-
 	vcodec := *vcodec_param
 	tag := *tag_param
 
@@ -316,11 +307,11 @@ func main() {
 	}
 
 	args_param := ArgParam{
-		rate:      *rate,
-		framerate: framerate_str,
-		codec:     codec,
-		scale:     *scale,
-		pix_fmt:   *pix_fmt,
+		rate:     *rate,
+		duration: *duration,
+		codec:    codec,
+		scale:    *scale,
+		pix_fmt:  *pix_fmt,
 	}
 
 	if !*non_interactive {
