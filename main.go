@@ -8,6 +8,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/hellflame/argparse"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"gopkg.in/gographics/imagick.v3/imagick"
+	"regexp"
 
 	"gen-E-albums/assert"
 )
@@ -46,8 +48,7 @@ func AddingOutputMpegMetaData(ffmpeg *ffmpeg.KwArgs) {
 }
 
 func AddingFFMpegCliVerbose(ffmpeg *ffmpeg.Stream) *ffmpeg.Stream {
-	stream := ffmpeg.OverWriteOutput().
-		ErrorToStdOut()
+	stream := ffmpeg.ErrorToStdOut()
 	return stream
 }
 
@@ -81,7 +82,8 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 	stream := ffmpeg.Input(file, ffmpeg_input_KwArg).
 		Filter("fade", ffmpeg.Args{"t=in:st=0:d=0.5"}).
 		Filter("fade", ffmpeg.Args{"t=out:st=1.5:d=0.5"}).
-		Output(output, ffmpeg_output_KwArg)
+		Output(output, ffmpeg_output_KwArg).
+		OverWriteOutput()
 
 	err := AddingFFMpegCliVerbose(stream).Run()
 	if err != nil {
@@ -235,7 +237,8 @@ func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) erro
 	ffmpeg_output_KwArg["r"] = rate
 
 	stream := ffmpeg.Concat(ImageObjs, ffmpeg.KwArgs{}).
-		Output(output, ffmpeg_output_KwArg)
+		Output(output, ffmpeg_output_KwArg).
+		OverWriteOutput()
 
 	err := AddingFFMpegCliVerbose(stream).Run()
 	if err != nil {
@@ -296,6 +299,25 @@ func main() {
 	case len(*vcodec_param) == 0:
 		fmt.Println("错误，参数错误，VCODEC_PARAM不能传入空参数")
 		return
+	}
+
+	cmd := exec.Command("ffmpeg", "-version")
+
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println(">>>无法检测到ffmpeg工具，请安装ffmpeg并加入环境变量！")
+		return
+	} else {
+		outputline := strings.Split(string(output), "\n")
+		version_info := outputline[0]
+		re := regexp.MustCompile(`^ffmpeg version (\d.\d).*$`)
+		group := re.FindStringSubmatch(version_info)
+		if len(group) == 0 {
+			fmt.Println(">>>错误：ffmpeg不是有效的ffmpeg官方工具，请重新安装！")
+			return
+		} else {
+			fmt.Println(">>> 检测到ffmpeg版本：", group[1])
+		}
 	}
 
 	vcodec := *vcodec_param
