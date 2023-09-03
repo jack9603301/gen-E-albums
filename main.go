@@ -270,8 +270,8 @@ func main() {
 		Default:  "INFO"})
 	err := parser.Parse(nil)
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		//fmt.Println(err.Error())
+		//return
 	}
 
 	switch {
