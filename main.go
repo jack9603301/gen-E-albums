@@ -45,6 +45,12 @@ func AddingOutputMpegMetaData(ffmpeg *ffmpeg.KwArgs) {
 	(*ffmpeg)["metadata"] = "description=\"此视频相册由gen-E-albums电子相册编译程序压制而成，它是出于兴趣和需求而编写，源代码从github的jack9603301/gen-E-albums获取\""
 }
 
+func AddingFFMpegCliVerbose(ffmpeg *ffmpeg.Stream) *ffmpeg.Stream {
+	stream := ffmpeg.OverWriteOutput().
+		ErrorToStdOut()
+	return stream
+}
+
 func ImageToH265Mpeg(file string, tmp_output string, output string, args_param ArgParam) (string, error) {
 	fmt.Println("转入图片压制视频处理程序，同时应用滤镜")
 	fmt.Println("输入图片的保留时间是：", args_param.duration)
@@ -72,13 +78,12 @@ func ImageToH265Mpeg(file string, tmp_output string, output string, args_param A
 	ffmpeg_input_KwArg := ffmpeg.KwArgs{}
 	ffmpeg_input_KwArg["loop"] = 1
 
-	err := ffmpeg.Input(file, ffmpeg_input_KwArg).
+	stream := ffmpeg.Input(file, ffmpeg_input_KwArg).
 		Filter("fade", ffmpeg.Args{"t=in:st=0:d=0.5"}).
 		Filter("fade", ffmpeg.Args{"t=out:st=1.5:d=0.5"}).
-		Output(output, ffmpeg_output_KwArg).
-		OverWriteOutput().
-		ErrorToStdOut().
-		Run()
+		Output(output, ffmpeg_output_KwArg)
+
+	err := AddingFFMpegCliVerbose(stream).Run()
 	if err != nil {
 		fmt.Println(err)
 		return "", err
@@ -229,11 +234,10 @@ func VideoConcat(ImagesMpeg *list.List, output string, args_param ArgParam) erro
 	rate := fmt.Sprintf("%d", args_param.rate)
 	ffmpeg_output_KwArg["r"] = rate
 
-	err := ffmpeg.Concat(ImageObjs, ffmpeg.KwArgs{}).
-		Output(output, ffmpeg_output_KwArg).
-		OverWriteOutput().
-		ErrorToStdOut().
-		Run()
+	stream := ffmpeg.Concat(ImageObjs, ffmpeg.KwArgs{}).
+		Output(output, ffmpeg_output_KwArg)
+
+	err := AddingFFMpegCliVerbose(stream).Run()
 	if err != nil {
 		fmt.Println(err)
 		return err
