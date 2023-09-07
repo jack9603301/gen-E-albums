@@ -12,10 +12,10 @@ pub fn node_manager(_attr: proc_macro::TokenStream, input: proc_macro::TokenStre
     let name : & syn::Ident = &ast.ident;
 
     let node_next= quote! {
-        NextNode: Option<Rc<dyn Node>>
+        next_node: Option<std::rc::Rc<dyn Node>>
     };  //定义NextNode的AST（语法树）描述
     let node_prev= quote! {
-        PrevNode: Option<Rc<dyn Node>>
+        prev_node: Option<std::rc::Rc<dyn Node>>
     };//定义PrevNode的AST（语法树）描述
 
     let node_next_ast = syn::Field::parse_named.parse2(node_next).unwrap();   //解析，生成node_next的代码对应的AST
@@ -43,21 +43,21 @@ pub fn node_manager(_attr: proc_macro::TokenStream, input: proc_macro::TokenStre
     let output = quote! {
         #ast
 
-        impl NodeManager for #name {
-            fn GetNextNode(&self) -> &Option<Rc<dyn Node>> {
-                return &self.NextNode;
+        impl super::node::NodeManager for #name {
+            fn get_next_node(&self) -> &Option<std::rc::Rc<dyn Node>> {
+                return &self.next_node;
             }
-            fn GetPrevNode(&self) -> &Option<Rc<dyn Node>> {
-                return &self.PrevNode;
+            fn get_prev_node(&self) -> &Option<std::rc::Rc<dyn Node>> {
+                return &self.prev_node;
             }
-            fn SetNextNode(&mut self, node : &Option<Rc<dyn Node>>) {
-                self.NextNode = match node {
+            fn set_next_node(&mut self, node : &Option<std::rc::Rc<dyn Node>>) {
+                self.next_node = match node {
                     Some(node) => Some(node.clone()),
                     None => None
                 };
             }
-            fn SetPrevNode(&mut self, node : &Option<Rc<dyn Node>>) {
-                self.PrevNode = match node {
+            fn set_prev_node(&mut self, node : &Option<std::rc::Rc<dyn Node>>) {
+                self.prev_node = match node {
                     Some(node) => Some(node.clone()),
                     None => None
                 }

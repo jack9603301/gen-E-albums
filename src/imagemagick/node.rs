@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
 pub trait Node {
-    fn TypeId(& self) -> u32;
-    fn GetArgs(&mut self) -> Option<String>;
+    fn type_id(& self) -> u32;
+    fn get_args(& self) -> Option<String>;
 }
 
 pub trait NodeManager {
-    fn SetNextNode(&mut self, node : &Option<Rc<dyn Node>>); 
-    fn GetNextNode(&self) -> &Option<Rc<dyn Node>>;
-    fn SetPrevNode(&mut self, node : &Option<Rc<dyn Node>>);
-    fn GetPrevNode(&self) -> &Option<Rc<dyn Node>>;
+    fn set_next_node(&mut self, node : &Option<Rc<dyn Node>>); 
+    fn get_next_node(&self) -> &Option<Rc<dyn Node>>;
+    fn set_prev_node(&mut self, node : &Option<Rc<dyn Node>>);
+    fn get_prev_node(&self) -> &Option<Rc<dyn Node>>;
 }
