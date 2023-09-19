@@ -21,7 +21,7 @@ jobs:
     - name: Git Release
       uses: anton-yurchenko/git-release@v5.0.2
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUBTOKEN }}
         PRE_RELEASE: true
         RELEASE_NAME_SUFFIX: "no-release"
       with:
