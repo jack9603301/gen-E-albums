@@ -1,0 +1,27 @@
+name: Rust build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Git Release
+      uses: anton-yurchenko/git-release@v5.0.2
+      env:
+        PRE_RELEASE: true
+        RELEASE_NAME_SUFFIX: "no-release"
+      with:
+        args: target/debug/gen-e-albums
