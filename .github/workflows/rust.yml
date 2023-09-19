@@ -15,6 +15,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install latest nightly
+      uses: fsouza/rs-toolchain@v1.1.0
+      with:
+          toolchain: nightly
+          override: true
+          components: rustfmt, clippy
     - name: Build
       run: |
         cargo build
@@ -24,3 +30,23 @@ jobs:
       with:
         token: ${{ secrets.GITHUBTOKEN }}
         files: target/debug/gen-e-albums
+  build-mac:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install latest nightly
+      uses: fsouza/rs-toolchain@v1.1.0
+      with:
+          toolchain: nightly
+          override: true
+          components: rustfmt, clippy
+    - name: Build
+      run: |
+        cargo build
+        mv target/debug/gen-e-albums target/debug/gen-e-albums-macOS
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        token: ${{ secrets.GITHUBTOKEN }}
+        files: target/debug/gen-e-albums-macOS
