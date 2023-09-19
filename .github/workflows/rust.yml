@@ -16,9 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build and Release
-      uses: manoadamro/rust-release@v1
+    - name: Release
+      uses: softprops/action-gh-release@v0.1.15
       with:
-        owner: ${{ github.repository_owner }}
-        repo: ${{ github.repository }}
-        token: ${{ secrets.GITHUBTOKEN }}
+        files: target/debug/gen-e-albums
